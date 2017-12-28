@@ -18,7 +18,7 @@ event OnInit(UIScreen Screen)
 	`XEVENTMGR.RegisterForEvent(ThisObj, 'RecoveryTurnSystemUpdate', OnQueueUpdate, ELD_OnStateSubmitted);
 }
 
-private function EventListenerReturn OnQueueUpdate(Object EventData, Object EventSource, XComGameState NewGameState, Name InEventID)
+private function EventListenerReturn OnQueueUpdate(Object EventData, Object EventSource, XComGameState NewGameState, Name InEventID, Object CallbackData)
 {
 	local XComGameState_RecoveryQueue RecoveryQueue;
 	local UITacticalHUD TacHUDScreen;

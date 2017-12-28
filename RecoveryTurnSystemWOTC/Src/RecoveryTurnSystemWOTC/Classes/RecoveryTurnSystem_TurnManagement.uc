@@ -7,13 +7,13 @@ static function array<X2DataTemplate> CreateTemplates()
 
   `log("RecoveryTurnSystem_TurnManagement :: Registering Tactical Event Listeners");
 
-  Templates.AddItem(AddTacticalNextInitiativeOrder());
+  Templates.AddItem(AddTacticalNextInitiativeGroup());
 
   return Templates;
 }
 
 
-static function X2EventListenerTemplate AddTacticalCleanupEvent()
+static function X2EventListenerTemplate AddTacticalNextInitiativeGroup()
 {
   local X2EventListenerTemplate Template;
 
