@@ -14,6 +14,7 @@ event OnInit(UIScreen Screen)
 	QueueDisplay = TacHUDScreen.Spawn(class'UIRecoveryTurnSystemDisplay', TacHUDScreen);
 	QueueDisplay.InitPanel('UIRecoveryTurnQueue');
 	QueueDisplay.InitRecoveryQueue(TacHUDScreen);
+	`log("Loading RQ");
 
 	`XEVENTMGR.RegisterForEvent(ThisObj, 'RecoveryTurnSystemUpdate', OnQueueUpdate, ELD_OnStateSubmitted);
 }

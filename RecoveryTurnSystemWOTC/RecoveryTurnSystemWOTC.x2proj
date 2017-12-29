@@ -15,6 +15,9 @@
     <Content Include="Config\XComEngine.ini">
       <SubType>Content</SubType>
     </Content>
+    <Content Include="Config\XComGame.ini">
+      <SubType>Content</SubType>
+    </Content>
     <Content Include="Config\XComRecoveryTurnSystem.ini">
       <SubType>Content</SubType>
     </Content>
@@ -26,6 +29,9 @@
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\RecoveryTurnSystemWOTC\Classes\UIRecoveryTurnSystemListener.uc">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="Src\RecoveryTurnSystemWOTC\Classes\X2DownloadableContentInfo_RecoveryTurnSystem.uc">
       <SubType>Content</SubType>
     </Content>
     <Content Include="Src\RecoveryTurnSystemWOTC\Classes\XComGameState_RecoveryQueue.uc">
