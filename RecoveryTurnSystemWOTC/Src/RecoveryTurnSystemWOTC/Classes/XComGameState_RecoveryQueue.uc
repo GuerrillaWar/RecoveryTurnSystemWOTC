@@ -16,6 +16,7 @@ var const config int RecoveryMinClamp;
 var const config int RecoveryWait;
 var const config int TurnLength;
 var const config int RecoveryBaseShuffle;
+var() int ActiveGroupID;
 var() int TurnCycler;
 var() bool TurnCycleEnd;
 
