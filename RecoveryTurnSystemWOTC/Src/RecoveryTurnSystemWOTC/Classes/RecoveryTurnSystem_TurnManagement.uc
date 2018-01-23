@@ -65,12 +65,19 @@ static protected function EventListenerReturn OnStartOfTacticalActionTurn(Object
 		BattleData.InterruptingGroupRef.ObjectID == RecoveryQueue.ActiveGroupID
 	)
 	{
-		`log("RecoveryTurnSystem :: Broke early");
+		`log("RecoveryTurnSystem :: In the Middle of an Interruption Turn");
 		return ELR_NoInterrupt;
 	}
 
 	NewGameState = class'XComGameStateContext_ChangeContainer'.static.CreateChangeState("SetupUnitActionsForPlayerTurnBegin");
 	RecoveryQueue = XComGameState_RecoveryQueue(NewGameState.CreateStateObject(class'XComGameState_RecoveryQueue', RecoveryQueue.ObjectID));
+	foreach NewGameState.IterateByClassType(class'XComGameState_Unit', UnitState)
+	{
+		// heavy handed clear of all action points to see if it clears out non 
+		// recovery units from acting
+		UnitState = XComGameState_Unit(NewGameState.ModifyStateObject(class'XComGameState_Unit', UnitState.ObjectID));
+		UnitState.ActionPoints.Length = 0;
+	}
 
 	// return current unit reference to the queue - this will probably be
 	// moved as we are not likely to have ActionsAvailable here
@@ -80,23 +87,28 @@ static protected function EventListenerReturn OnStartOfTacticalActionTurn(Object
 	if (UnitRef.ObjectID != 0)
 	{
 		UnitState = XComGameState_Unit(NewGameState.ModifyStateObject(class'XComGameState_Unit', UnitRef.ObjectID));
-		RecoveryGroup = UnitState.GetGroupMembership();
-		UnitState.GetUnitValue('RTSOriginalGroup', ReturnGroupValue);
-		ReturnGroup = XComGameState_AIGroup(NewGameState.ModifyStateObject(class'XComGameState_AIGroup', ReturnGroupValue.fValue));
-		ReturnGroup.AddUnitToGroup(UnitState.ObjectID, NewGameState);
-		UnitState.ClearUnitValue('RTSOriginalGroup');
-		RecoveryQueue.ReturnUnitToQueue(UnitState);
+		if (UnitState.GetTeam() == eTeam_XCom)
+		{
+			RecoveryGroup = UnitState.GetGroupMembership();
+			UnitState.GetUnitValue('RTSOriginalGroup', ReturnGroupValue);
+			ReturnGroup = XComGameState_AIGroup(NewGameState.ModifyStateObject(class'XComGameState_AIGroup', ReturnGroupValue.fValue));
+			ReturnGroup.AddUnitToGroup(UnitState.ObjectID, NewGameState);
+			UnitState.ClearUnitValue('RTSOriginalGroup');
+			RecoveryQueue.ReturnUnitToQueue(UnitState);
+		}
 	}
 
 	FollowerRefs = RecoveryQueue.GetCurrentFollowerReferences();
 	foreach FollowerRefs(UnitRef)
 	{	
 		UnitState = XComGameState_Unit(NewGameState.ModifyStateObject(class'XComGameState_Unit', UnitRef.ObjectID));
-		UnitState.GetUnitValue('RTSOriginalGroup', ReturnGroupValue);
-		ReturnGroup = XComGameState_AIGroup(NewGameState.ModifyStateObject(class'XComGameState_AIGroup', ReturnGroupValue.fValue));
-		ReturnGroup.AddUnitToGroup(UnitState.ObjectID, NewGameState);
-		UnitState.ClearUnitValue('RTSOriginalGroup');
-		RecoveryQueue.ReturnFollowerUnitToQueue(UnitState);
+		if (UnitState.GetTeam() == eTeam_XCom)
+		{
+			UnitState.GetUnitValue('RTSOriginalGroup', ReturnGroupValue);
+			ReturnGroup.AddUnitToGroup(UnitState.ObjectID, NewGameState);
+			UnitState.ClearUnitValue('RTSOriginalGroup');
+			RecoveryQueue.ReturnFollowerUnitToQueue(UnitState);
+		}
 	}
 	// end return functionality
 
@@ -115,34 +127,40 @@ static protected function EventListenerReturn OnStartOfTacticalActionTurn(Object
 		UnitState = XComGameState_Unit(NewGameState.ModifyStateObject(class'XComGameState_Unit', UnitRef.ObjectID));
 	}
 
-	UnitState.SetUnitFloatValue('RTSOriginalGroup', UnitState.GetGroupMembership().ObjectID, eCleanup_BeginTactical);
-	LeaverGroup = UnitState.GetGroupMembership();
-	ActorGroupState = XComGameState_AIGroup(NewGameState.CreateNewStateObject(class'XComGameState_AIGroup'));
-	ActorGroupState.bSummoningSicknessCleared = true;
+	if (UnitState.GetTeam() == eTeam_XCom)
+	{
+		UnitState.SetUnitFloatValue('RTSOriginalGroup', UnitState.GetGroupMembership().ObjectID, eCleanup_BeginTactical);
+		LeaverGroup = UnitState.GetGroupMembership();
+		ActorGroupState = XComGameState_AIGroup(NewGameState.CreateNewStateObject(class'XComGameState_AIGroup'));
+		ActorGroupState.bSummoningSicknessCleared = true;
 
-	if (LeaverGroup != none) {
-		`log("Leaving Group");
-		LeaverGroup.RemoveUnitFromGroup(UnitState.ObjectID, NewGameState);
+		// TODO: only create interrupt groups for XCOM, where their group is sacred and can't be used for interrupt
+		//       AI controlled groups of any other team should use a combination of:
+		//       - their designated group
+		//       - action point scrubbing in OnUnitGroupTurnBegun for any parts of the group that shouldn't be acting this round
+
+		if (LeaverGroup != none) {
+			`log("Leaving Group");
+			LeaverGroup.RemoveUnitFromGroup(UnitState.ObjectID, NewGameState);
+		}
+
+		`log("Unit Team:" @ UnitState.GetTeam());
+		`log("Adding To Group");
+		ActorGroupState.AddUnitToGroup(UnitState.ObjectID, NewGameState);
 	}
-
-	`log("Unit Team:" @ UnitState.GetTeam());
-	`log("Adding To Group");
-	ActorGroupState.AddUnitToGroup(UnitState.ObjectID, NewGameState);
-
-	if (UnitState.IsGroupLeader() && LeaverGroup != none && UnitState.GetTeam() != eTeam_XCom) {
-		if ( XGUnit(UnitState.GetVisualizer()).GetAlertLevel(UnitState) != eAL_Red )
-		{
-			`log("Sweeping Unalerted Pod");
-			foreach LeaverGroup.m_arrMembers(FollowerRef, FollowerIx)
+	else
+	{
+		ActorGroupState = UnitState.GetGroupMembership();
+		if (UnitState.IsGroupLeader() && LeaverGroup != none && UnitState.GetTeam() != eTeam_XCom) {
+			if ( XGUnit(UnitState.GetVisualizer()).GetAlertLevel(UnitState) != eAL_Red )
 			{
-				if (FollowerIx == 0) continue; // this is the leader so ignore
-				FollowerState = XComGameState_Unit(NewGameState.ModifyStateObject(class'XComGameState_Unit', FollowerRef.ObjectID));
-				RecoveryQueue.AddFollower(FollowerState);
-				FollowerState.SetUnitFloatValue('RTSOriginalGroup', FollowerState.GetGroupMembership().ObjectID, eCleanup_BeginTactical);
-				LeaverGroup.RemoveUnitFromGroup(FollowerState.ObjectID, NewGameState);
-				`log("Leaving Group");
-				ActorGroupState.AddUnitToGroup(FollowerState.ObjectID, NewGameState);
-				`log("Adding To Group");
+				`log("Sweeping Unalerted Pod");
+				foreach LeaverGroup.m_arrMembers(FollowerRef, FollowerIx)
+				{
+					if (FollowerIx == 0) continue; // this is the leader so ignore
+					FollowerState = XComGameState_Unit(NewGameState.ModifyStateObject(class'XComGameState_Unit', FollowerRef.ObjectID));
+					RecoveryQueue.AddFollower(FollowerState);
+				}
 			}
 		}
 	}
@@ -163,24 +181,50 @@ static protected function EventListenerReturn OnUnitGroupTurnBegun(Object EventD
 {
 	local XComGameState_RecoveryQueue RecoveryQueue;
 	local XComGameState_AIGroup GroupState;
-	local XComGameState_Unit UnitState, UnitHistoryState;
+	local XComGameState_Unit UnitState;
 	local StateObjectReference UnitRef, FollowerRef;
 	local int UnitIx;
-	local bool bIsPartOfThisInterrupt;
+	local bool bIsPartOfThisInterrupt, bIsActing;
 
 	GroupState = XComGameState_AIGroup(EventData);
 	RecoveryQueue = XComGameState_RecoveryQueue(`XCOMHISTORY.GetSingleGameStateObjectForClass(class'XComGameState_RecoveryQueue'));
 	`log("Current Initiative Interrupting: " @ GroupState.ObjectID);
-	foreach GroupState.m_arrMembers(UnitRef) 
+	if (RecoveryQueue.ActiveGroupID != GroupState.ObjectID)
 	{
-		`log("- GroupUnits UnitID: " @ UnitRef.ObjectID);
+		`log("Scrubbing group action points, it's not meant to be acting now");
+		foreach GroupState.m_arrMembers(UnitRef) 
+		{
+			`log("- Scrubbing actions for UnitID: " @ UnitRef.ObjectID);
+			UnitState = XComGameState_Unit(NextGameState.ModifyStateObject(class'XComGameState_Unit', UnitRef.ObjectID));
+			UnitState.ActionPoints.Length = 0;
+		}
 	}
-	`log("Current Unit " @ RecoveryQueue.CurrentUnit.UnitRef.ObjectID);
-	UnitHistoryState = XComGameState_Unit(`XCOMHISTORY.GetGameStateForObjectID(RecoveryQueue.CurrentUnit.UnitRef.ObjectID));
-	UnitState = XComGameState_Unit(NextGameState.GetGameStateForObjectID(RecoveryQueue.CurrentUnit.UnitRef.ObjectID));
-	`log("Current Unit ActionPoints:" @ UnitState.ActionPoints.Length);
-	`log("Current Unit ActionPoints:" @ UnitHistoryState.ActionPoints.Length);
-	// need to run some checks on why they're not able to act, do they have action points?
+	else
+	{
+		`log("Correct recovery group, verify individual units which are allowed to act");
+		foreach GroupState.m_arrMembers(UnitRef) 
+		{
+			bIsActing = false;
+			if (RecoveryQueue.CurrentUnit.UnitRef.ObjectID == UnitRef.ObjectID)
+			{
+				bIsActing = true;
+			}
+
+			foreach RecoveryQueue.CurrentFollowers(FollowerRef)
+			{
+				if (FollowerRef.ObjectID == UnitRef.ObjectID)
+				{
+					bIsActing = true;
+				}
+			}
+
+			if (!bIsActing)
+			{
+				UnitState = XComGameState_Unit(NextGameState.ModifyStateObject(class'XComGameState_Unit', UnitRef.ObjectID));
+				UnitState.ActionPoints.Length = 0;
+			}
+		}
+	}
 
 	return ELR_NoInterrupt;
 }
